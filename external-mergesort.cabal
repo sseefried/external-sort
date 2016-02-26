@@ -30,10 +30,8 @@ library
                      , pipes-interleave
                      , pipes-bytestring
                      , bytestring
-
-                     , vector
-                     , vector-algorithms
                      , containers
+                     , unix
 
   default-language:    Haskell2010
   ghc-options: -Wall -O2
