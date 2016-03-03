@@ -11,7 +11,7 @@ import           System.IO
 import           System.Posix.Temp
 
 -- friends
-import           Data.ExternalMergeSort.VectorSort (vectorSort)
+-- import           Data.ExternalMergeSort.VectorSort (vectorSort)
 
 -- TODO
 -- 0. Use handles instead of file paths in the pipes. Makes closing easier.
@@ -107,7 +107,7 @@ fileMerger cfg files outFile = do
     kReaders = map (\f -> reader perFileChunkSize (mscReadRec cfg) f >-> squeeze) files
     producer :: Producer a IO ()
     producer = interleave compare kReaders
-    consumer h = P.mapM (lift (mscWriteRec cfg h a))
+    consumer h = P.mapM_ (mscWriteRec cfg h)
 
 squeeze :: Monad m => Pipe [a] a m r
 squeeze = P.concat -- special case of Foldable a => Pipe (f a) a m r
