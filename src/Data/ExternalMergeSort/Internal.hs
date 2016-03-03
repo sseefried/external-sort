@@ -22,7 +22,7 @@ import           Data.ExternalMergeSort.VectorSort (vectorSort)
 
 data MergeSortCfg a =
   MergeSortCfg {
-      -- @readRec h@ is responsible for read one record from a handle
+      -- @readRec h@ is responsible for reading one record from a handle
       mscReadRec  :: Handle -> IO a
       -- @mscWriteRec h r@ writes a single record to a handle
     , mscWriteRec :: Handle -> a -> IO ()
@@ -31,13 +31,14 @@ data MergeSortCfg a =
 
 externalMergeSort :: Ord a => MergeSortCfg a -> FilePath -> FilePath -> IO ()
 externalMergeSort cfg inFile outFile = do
+  -- TODO: Use bracket here
   files <- sortAndWriteToChunks cfg inFile
   runEffect $ fileMerger cfg files outFile
   mapM_ removeFile files
 
 -- a pipe that reads in a chunk of a file and sorts it
 chunkSorter :: (Ord a, Monad m)  => Pipe [a] [a] m ()
-chunkSorter = await >>= yield . sort >> chunkSorter
+chunkSorter = P.map sort -- TODO: use vector sort
 
 reader :: Int -> (Handle -> IO a) -> FilePath -> Producer' [a] IO ()
 reader chunkSize readF inFile = do
@@ -74,6 +75,7 @@ writer cfg prefix = go
   where
     go = do
       as <- await -- [as] is sorted
+      -- TODO: use one lift and bracket within.
       (file, h) <- lift $ mkstemp prefix
       lift $ mapM_ (mscWriteRec cfg h) as
       lift $ hClose h
@@ -84,7 +86,7 @@ writer cfg prefix = go
 -- takes an input file, reads it, writes out to n temporary sorted files
 --
 sortAndWriteToChunks :: forall a. (Ord a) => MergeSortCfg a -> FilePath -> IO [FilePath]
-sortAndWriteToChunks cfg inFile = reverse <$> P.fold (flip (:)) [] id producer
+sortAndWriteToChunks cfg inFile = reverse <$> P.fold (flip (:)) [] id producer -- TODO: Consider P.toList
   where
     producer :: Producer FilePath IO ()
     producer = reader (mscChunkSize cfg) (mscReadRec cfg) inFile >->
@@ -101,15 +103,10 @@ fileMerger cfg files outFile = do
     numFiles = length files
     perFileChunkSize = mscChunkSize cfg `div` (numFiles + 1)
     kReaders :: [Producer a IO ()]
-    kReaders = map (\f -> reader  perFileChunkSize (mscReadRec cfg) f >-> squeeze) files
+    kReaders = map (\f -> reader perFileChunkSize (mscReadRec cfg) f >-> squeeze) files
     producer :: Producer a IO ()
     producer = interleave compare kReaders
-    consumer h = await >>= \a -> lift (mscWriteRec cfg h a) >> consumer h
+    consumer h = P.mapM (lift (mscWriteRec cfg h a))
 
 squeeze :: Monad m => Pipe [a] a m r
-squeeze = go
-  where
-    go = do
-      xs <- await
-      mapM_ yield xs
-      go
+squeeze = P.concat -- special case of Foldable a => Pipe (f a) a m r
