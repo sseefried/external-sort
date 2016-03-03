@@ -18,6 +18,7 @@ import           Data.ExternalMergeSort.VectorSort (vectorSort)
 -- 1. Clean up on Ctrl-C
 -- 2. Put temp files /tmp
 -- 3. Make concurrent using Pipes.Concurrent
+-- 4. Try unchunking. Check performance
 
 
 data MergeSortCfg a =
