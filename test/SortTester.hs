@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 module Main where
 
+import           Control.Exception
 import           Control.Monad (when, replicateM_)
 import           Criterion.Main
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as LB
-import           Data.ExternalSort.Internal (externalSort, ExternalSortCfg(..))
+import           Data.ExternalSort.Internal (externalSortFile, ExternalSortCfg(..))
 import           System.Directory
 import           System.Environment
 import           System.Exit
@@ -25,14 +26,15 @@ main = do
   putStrLn "Generating random file..."
   inFile  <- genRandomFile (read numberOfIntsStr)
   outFile <- genOutputFileName
-  withArgs restArgs $
-    defaultMain [
-      bgroup "sort-tester" [
-        bench "sort" $ nfIO (externalSort cfg inFile outFile)
-      ]
-    ]
-  removeFile inFile
-  removeFile outFile
+  finally
+    (withArgs restArgs $
+      defaultMain [
+        bgroup "sort-tester" [
+          bench "sort" $ nfIO (externalSortFile cfg inFile outFile)
+        ]
+      ])
+    (do removeFile inFile
+        removeFile outFile)
 
 genRandomFile :: Int -> IO FilePath
 genRandomFile n = do

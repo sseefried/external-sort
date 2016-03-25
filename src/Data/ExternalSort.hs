@@ -1,5 +1,6 @@
 module Data.ExternalSort (
-    externalSort
+    externalSortFile
+  , externalSortHandle
   ) where
 
 import Data.ExternalSort.Internal
