@@ -1,23 +1,54 @@
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 module Main where
 
-import           Control.Monad (when)
+import           Control.Monad (when, replicateM_)
+import           Criterion.Main
+import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy as LB
 import           Data.ExternalMergeSort.Internal (externalMergeSort, MergeSortCfg(..))
-import           System.IO
+import           System.Directory
 import           System.Environment
 import           System.Exit
-
-
+import           System.IO
+import           System.Posix.Temp (mkstemp)
+import           System.Random
+import qualified Text.Show.ByteString as S
 
 main :: IO ()
 main = do
   args <- getArgs
-  when (length args < 3) $ do
-    putStrLn "Usage: sort-tester <in file> <out file> <chunk size>"
+  when (length args < 2) $ do
+    putStrLn "Usage: sort-tester <number of ints> <chunk size>"
     exitWith (ExitFailure 1)
-  let inFile:outFile:chunkSizeStr:_ = args
+  let numberOfIntsStr:chunkSizeStr:restArgs = args
       cfg = MergeSortCfg reader write (read chunkSizeStr)
-  externalMergeSort cfg inFile outFile
+  putStrLn "Generating random file..."
+  inFile  <- genRandomFile (read numberOfIntsStr)
+  outFile <- genOutputFileName
+  withArgs restArgs $ do
+    defaultMain [
+      bgroup "sort-tester" [
+        bench "sort" $ nfIO (externalMergeSort cfg inFile outFile)
+      ]
+     ]
+  removeFile inFile
+  removeFile outFile
 
+genRandomFile :: Int -> IO FilePath
+genRandomFile n = do
+  (path, inH) <- mkstemp "unsorted.txt."
+  let writeInt = do
+        (i :: Int) <- randomRIO (0,maxBound)
+        B.hPutStrLn inH (LB.toStrict $ S.show i)
+  replicateM_ n writeInt
+  hClose inH
+  return path
+
+genOutputFileName :: IO FilePath
+genOutputFileName = do
+  (path, outH) <- mkstemp "sorted.txt."
+  hClose outH
+  return path
 
 reader :: Handle -> IO Int
 reader h = (read <$> hGetLine h)

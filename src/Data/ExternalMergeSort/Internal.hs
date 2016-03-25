@@ -2,6 +2,7 @@
 module Data.ExternalMergeSort.Internal
 where
 
+import           Control.Monad
 import           Data.List
 import           Pipes
 import qualified Pipes.Prelude as P
@@ -41,8 +42,8 @@ externalMergeSort cfg inFile outFile = do
 chunkSorter :: (Ord a, Monad m)  => Pipe [a] [a] m ()
 chunkSorter = P.map sort -- TODO: use vector sort
 
-reader :: Int -> (Handle -> IO a) -> FilePath -> Producer' [a] IO ()
-reader chunkSize readF inFile = do
+chunkReader :: Int -> (Handle -> IO a) -> FilePath -> Producer' [a] IO ()
+chunkReader chunkSize readF inFile = do
   h  <- lift $ openFile inFile ReadMode
   run h
   where
@@ -56,6 +57,7 @@ reader chunkSize readF inFile = do
 -- @Left as@ means that EOF has been reached as @as@ returned. May not be @n@ long.
 -- @Right as@ means that EOF has not yet been reached as @n@ @as@ have been read.
 --
+{-# INLINE readUpToN #-}
 readUpToN :: Int -> (Handle -> IO a) -> Handle -> IO (Either [a] [a])
 readUpToN n rd h = go 0 []
   where
@@ -70,18 +72,35 @@ readUpToN n rd h = go 0 []
           go (i+1) (a:as)
       | otherwise = return $ Right $ reverse as
 
-
-writer :: MergeSortCfg a -> String -> Pipe [a] FilePath IO ()
-writer cfg prefix = go
+chunkWriter :: MergeSortCfg a -> String -> Pipe [a] FilePath IO ()
+chunkWriter cfg prefix = go
   where
     go = do
       as <- await -- [as] is sorted
-      -- TODO: use one lift and bracket within.
-      (file, h) <- lift $ mkstemp prefix
-      lift $ mapM_ (mscWriteRec cfg h) as
-      lift $ hClose h
+      file <- lift $ do
+        (file,h) <- mkstemp prefix
+        mapM_ (mscWriteRec cfg h) as
+        hClose h
+        return file
       yield file
       go
+
+
+{-# INLINE fromHandle' #-}
+fromHandle' :: MonadIO m => (Handle -> IO a) -> Handle -> Producer' a m ()
+fromHandle' f h = go
+  where
+    go = do
+      eof <- liftIO $ hIsEOF h
+      when (not eof) $ do
+        r <- liftIO (f h)
+        yield r
+        go
+
+singleReader :: (Handle -> IO a) -> FilePath -> Producer' a IO ()
+singleReader readRec inFile = do
+  h  <- lift $ openFile inFile ReadMode
+  fromHandle' readRec h
 
 --
 -- takes an input file, reads it, writes out to n temporary sorted files
@@ -90,8 +109,8 @@ sortAndWriteToChunks :: forall a. (Ord a) => MergeSortCfg a -> FilePath -> IO [F
 sortAndWriteToChunks cfg inFile = reverse <$> P.fold (flip (:)) [] id producer -- TODO: Consider P.toList
   where
     producer :: Producer FilePath IO ()
-    producer = reader (mscChunkSize cfg) (mscReadRec cfg) inFile >->
-               chunkSorter >-> writer cfg inFile
+    producer = chunkReader (mscChunkSize cfg) (mscReadRec cfg) inFile >->
+               chunkSorter >-> chunkWriter cfg inFile
 ------------
 
 
@@ -101,10 +120,8 @@ fileMerger cfg files outFile = do
   producer >-> consumer h
   lift $ hClose h
   where
-    numFiles = length files
-    perFileChunkSize = mscChunkSize cfg `div` (numFiles + 1)
     kReaders :: [Producer a IO ()]
-    kReaders = map (\f -> reader perFileChunkSize (mscReadRec cfg) f >-> squeeze) files
+    kReaders = map (\f -> singleReader (mscReadRec cfg) f) files
     producer :: Producer a IO ()
     producer = interleave compare kReaders
     consumer h = P.mapM_ (mscWriteRec cfg h)

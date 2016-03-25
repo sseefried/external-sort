@@ -33,8 +33,15 @@ library
 executable sort-tester
   hs-source-dirs:      test
   build-depends:       base >= 4.7 && < 5
-                     , external-mergesort
+                     , bytestring
+                     , bytestring-show
+                     , criterion
+                     , directory
                      , optparse-applicative
+                     , random
+                     , unix
+                     , external-mergesort
+
   main-is:             SortTester.hs
   ghc-options: -threaded -rtsopts -with-rtsopts=-N  -O2
 
