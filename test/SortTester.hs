@@ -5,7 +5,7 @@ import           Control.Monad (when, replicateM_)
 import           Criterion.Main
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as LB
-import           Data.ExternalMergeSort.Internal (externalMergeSort, MergeSortCfg(..))
+import           Data.ExternalSort.Internal (externalSort, ExternalSortCfg(..))
 import           System.Directory
 import           System.Environment
 import           System.Exit
@@ -21,14 +21,14 @@ main = do
     putStrLn "Usage: sort-tester <number of ints> <chunk size>"
     exitWith (ExitFailure 1)
   let numberOfIntsStr:chunkSizeStr:restArgs = args
-      cfg = MergeSortCfg reader write (read chunkSizeStr)
+      cfg = ExternalSortCfg reader write (read chunkSizeStr)
   putStrLn "Generating random file..."
   inFile  <- genRandomFile (read numberOfIntsStr)
   outFile <- genOutputFileName
   withArgs restArgs $ do
     defaultMain [
       bgroup "sort-tester" [
-        bench "sort" $ nfIO (externalMergeSort cfg inFile outFile)
+        bench "sort" $ nfIO (externalSort cfg inFile outFile)
       ]
      ]
   removeFile inFile

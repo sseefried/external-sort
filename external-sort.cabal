@@ -1,8 +1,8 @@
-name:                external-mergesort
+name:                external-sort
 version:             0.1.0.0
 synopsis:            A mergesort that runs in constant amount of memory
 description:         Please see README.md
-homepage:            http://github.com/githubuser/external-mergesort#readme
+homepage:            http://github.com/sseefried/external-sort#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Sean Seefried
@@ -15,8 +15,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Data.ExternalMergeSort,
-                       Data.ExternalMergeSort.Internal
+  exposed-modules:     Data.ExternalSort,
+                       Data.ExternalSort.Internal
   build-depends:       base >= 4.7 && < 5
                      , pipes
                      , pipes-interleave
@@ -40,30 +40,31 @@ executable sort-tester
                      , optparse-applicative
                      , random
                      , unix
-                     , external-mergesort
+                     , external-sort
 
   main-is:             SortTester.hs
   ghc-options: -threaded -rtsopts -with-rtsopts=-N  -O2
+  default-language:    Haskell2010
 
 
-test-suite external-mergesort-test
+test-suite external-sort-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
-                     , external-mergesort
+                     , external-sort
                      , pipes
                      , hspec
 
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -O2
   default-language:    Haskell2010
 
-test-suite external-mergesort-test-qc
+test-suite external-sort-test-qc
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             QuickCheck.hs
   build-depends:       base
-                     , external-mergesort
+                     , external-sort
                      , pipes
                      , QuickCheck
 
@@ -73,4 +74,4 @@ test-suite external-mergesort-test-qc
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/external-mergesort
+  location: https://github.com/githubuser/external-sort

@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
-module Data.ExternalMergeSort.Internal
+module Data.ExternalSort.Internal
 where
 
 import           Control.Monad
@@ -12,7 +12,7 @@ import           System.IO
 import           System.Posix.Temp
 
 -- friends
--- import           Data.ExternalMergeSort.VectorSort (vectorSort)
+-- import           Data.ExternalSort.VectorSort (vectorSort)
 
 -- TODO
 -- 0. Use handles instead of file paths in the pipes. Makes closing easier.
@@ -22,8 +22,8 @@ import           System.Posix.Temp
 -- 4. Try unchunking. Check performance
 
 
-data MergeSortCfg a =
-  MergeSortCfg {
+data ExternalSortCfg a =
+  ExternalSortCfg {
       -- @readRec h@ is responsible for reading one record from a handle
       mscReadRec  :: Handle -> IO a
       -- @mscWriteRec h r@ writes a single record to a handle
@@ -31,8 +31,10 @@ data MergeSortCfg a =
     , mscChunkSize :: Int -- the number of records read per chunk
     }
 
-externalMergeSort :: Ord a => MergeSortCfg a -> FilePath -> FilePath -> IO ()
-externalMergeSort cfg inFile outFile = do
+
+
+externalSort :: Ord a => ExternalSortCfg a -> FilePath -> FilePath -> IO ()
+externalSort cfg inFile outFile = do
   -- TODO: Use bracket here
   files <- sortAndWriteToChunks cfg inFile
   runEffect $ fileMerger cfg files outFile
@@ -72,7 +74,7 @@ readUpToN n rd h = go 0 []
           go (i+1) (a:as)
       | otherwise = return $ Right $ reverse as
 
-chunkWriter :: MergeSortCfg a -> String -> Pipe [a] FilePath IO ()
+chunkWriter :: ExternalSortCfg a -> String -> Pipe [a] FilePath IO ()
 chunkWriter cfg prefix = go
   where
     go = do
@@ -105,7 +107,7 @@ singleReader readRec inFile = do
 --
 -- takes an input file, reads it, writes out to n temporary sorted files
 --
-sortAndWriteToChunks :: forall a. (Ord a) => MergeSortCfg a -> FilePath -> IO [FilePath]
+sortAndWriteToChunks :: forall a. (Ord a) => ExternalSortCfg a -> FilePath -> IO [FilePath]
 sortAndWriteToChunks cfg inFile = reverse <$> P.fold (flip (:)) [] id producer -- TODO: Consider P.toList
   where
     producer :: Producer FilePath IO ()
@@ -114,7 +116,7 @@ sortAndWriteToChunks cfg inFile = reverse <$> P.fold (flip (:)) [] id producer -
 ------------
 
 
-fileMerger :: forall a. Ord a => MergeSortCfg a -> [FilePath] -> FilePath -> Effect IO ()
+fileMerger :: forall a. Ord a => ExternalSortCfg a -> [FilePath] -> FilePath -> Effect IO ()
 fileMerger cfg files outFile = do
   h <- lift $ openFile outFile WriteMode
   producer >-> consumer h
