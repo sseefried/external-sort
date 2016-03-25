@@ -25,12 +25,12 @@ main = do
   putStrLn "Generating random file..."
   inFile  <- genRandomFile (read numberOfIntsStr)
   outFile <- genOutputFileName
-  withArgs restArgs $ do
+  withArgs restArgs $
     defaultMain [
       bgroup "sort-tester" [
         bench "sort" $ nfIO (externalSort cfg inFile outFile)
       ]
-     ]
+    ]
   removeFile inFile
   removeFile outFile
 
