@@ -10,8 +10,6 @@ import           Data.ExternalSort (externalSortFile)
 import           System.Directory
 import           System.Environment
 import           System.Exit
-import           System.IO
-import           System.Posix.Temp (mkstemp)
 
 main :: IO ()
 main = do

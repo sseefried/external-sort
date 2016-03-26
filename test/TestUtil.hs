@@ -40,22 +40,23 @@ readInt32 h = Bin.decode <$> LB.hGet h 4
 writeInt32 :: Handle -> Int32 -> IO ()
 writeInt32 h i = LB.hPut h (Bin.encode i)
 
-int32SortCfgOfSize chunkSize = ExternalSortCfg readInt32 writeInt32 chunkSize
+int32SortCfgOfSize :: Int -> ExternalSortCfg Int32
+int32SortCfgOfSize chunkSize = ExternalSortCfg readInt32 writeInt32 chunkSize sort compare
 
 isFileSorted :: forall a. (Ord a) => ExternalSortCfg a -> FilePath -> IO Bool
 isFileSorted cfg path = do
   h <- openFile path ReadMode
-  recs <- readRecs h
+  recs <- readVals h
   return (recs == sort recs)
   where
-    readRecs :: Ord a => Handle -> IO [a]
-    readRecs h = go
+    readVals :: Ord a => Handle -> IO [a]
+    readVals h = go
       where
         go = do
           eof <- hIsEOF h
           if (not eof)
            then do
-            rec  <- readRec cfg h
+            rec  <- readVal cfg h
             recs <- go
             return (rec:recs)
            else do

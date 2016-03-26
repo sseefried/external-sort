@@ -5,7 +5,6 @@ where
 
 import           Control.Exception
 import           Control.Monad
-import           Data.List
 import           Data.IORef
 import           Pipes
 import qualified Pipes.Prelude as P
@@ -27,23 +26,27 @@ import           System.Posix.Temp
 
 data ExternalSortCfg a =
   ExternalSortCfg {
-      -- | @readRec h@ is responsible for reading one record from a handle
-      readRec  :: Handle -> IO a
-      -- | @writeRec h r@ writes a single record to a handle
-    , writeRec :: Handle -> a -> IO ()
-      -- | the number of records in each chunk
+      -- | @readVal h@ is responsible for reading one value from a handle
+      readVal  :: Handle -> IO a
+      -- | @writeVal h r@ writes a single value to a handle
+    , writeVal :: Handle -> a -> IO ()
+      -- | the number of values in each chunk
     , chunkSize :: Int
+      -- | a function that sorts each chunk
+    , sorter :: [a] -> [a]
+      -- | a function that compares two values
+    , comparer :: a -> a -> Ordering
     }
 
 
 
-externalSortFile :: Ord a => ExternalSortCfg a -> FilePath -> FilePath -> IO ()
+externalSortFile :: ExternalSortCfg a -> FilePath -> FilePath -> IO ()
 externalSortFile cfg inFile outFile = do
   withFile inFile ReadMode   $ \inH  ->
     withFile outFile WriteMode $ \outH ->
       externalSortHandle cfg inH outH
 
-externalSortHandle :: Ord a => ExternalSortCfg a -> Handle -> Handle -> IO ()
+externalSortHandle :: ExternalSortCfg a -> Handle -> Handle -> IO ()
 externalSortHandle cfg inH outH = do
   -- fileRef is used to clean up intermediate files when exception occurs
   fileRef <- newIORef []
@@ -55,14 +58,14 @@ externalSortHandle cfg inH outH = do
 
 
 -- a pipe that reads in a chunk of a file and sorts it
-chunkSorter :: (Ord a, Monad m) => Pipe [a] [a] m ()
-chunkSorter = P.map sort -- TODO: use vector sort
+chunkSorter :: (Monad m) => ExternalSortCfg a -> Pipe [a] [a] m ()
+chunkSorter = P.map . sorter
 
 chunkReader :: Int -> (Handle -> IO a) -> Handle -> Producer' [a] IO ()
-chunkReader chunkSize readF inH = go
+chunkReader chunkSz readF inH = go
   where
     go = do
-      etAs <- lift $ readUpToN chunkSize readF inH
+      etAs <- lift $ readUpToN chunkSz readF inH
       case etAs of
         Left as  -> yield as
         Right as -> yield as >> go
@@ -95,7 +98,7 @@ chunkWriter cfg fileRef = go
         (file,h) <- mkstemp "sort-chunk."
         modifyIORef fileRef (file:)
         finally
-          (mapM_ (writeRec cfg h) as)
+          (mapM_ (writeVal cfg h) as)
           (hClose h)
       go
 
@@ -115,34 +118,34 @@ fromHandle' f h = go
         go
 
 singleReader :: (Handle -> IO a) -> FilePath -> Producer' a IO ()
-singleReader readRec inFile = do
+singleReader reader inFile = do
   h  <- lift $ openFile inFile ReadMode
-  fromHandle' readRec h
+  fromHandle' reader h
 
 --
 -- @sortAndWriteToChunks@ reads a number of chunks from the input handle, sorts them, and
--- writes them out to intermediate files containing @chunkSize cfg@ records.
+-- writes them out to intermediate files containing @chunkSize cfg@ values.
 -- The paths of the intermediate files are stored in @fileRef@.
 -- (This is so if there is an exception and the program needs to abort we can clean these files
 -- up.)
 --
-sortAndWriteToChunks :: forall a. (Ord a) => ExternalSortCfg a -> IORef [FilePath]
+sortAndWriteToChunks :: forall a. ExternalSortCfg a -> IORef [FilePath]
                      -> Handle -> IO ()
 sortAndWriteToChunks cfg fileRef inH = runEffect producer
   where
     producer :: Effect IO ()
-    producer = chunkReader (chunkSize cfg) (readRec cfg) inH >->
-               chunkSorter >-> chunkWriter cfg fileRef
+    producer = chunkReader (chunkSize cfg) (readVal cfg) inH >->
+               chunkSorter cfg >-> chunkWriter cfg fileRef
 ------------
 
-fileMerger :: forall a. Ord a => ExternalSortCfg a -> IORef [FilePath] -> Handle -> Effect IO ()
+fileMerger :: forall a. ExternalSortCfg a -> IORef [FilePath] -> Handle -> Effect IO ()
 fileMerger cfg fileRef outH = do
   files <- lift $ readIORef fileRef
   producer files >-> consumer outH
   where
     producer :: [FilePath] -> Producer a IO ()
-    producer files = interleave compare kReaders
+    producer files = interleave (comparer cfg) kReaders
       where
         kReaders :: [Producer a IO ()]
-        kReaders = map (\f -> singleReader (readRec cfg) f) files
-    consumer h = P.mapM_ (writeRec cfg h)
+        kReaders = map (\f -> singleReader (readVal cfg) f) files
+    consumer h = P.mapM_ (writeVal cfg h)
