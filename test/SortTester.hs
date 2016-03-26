@@ -34,9 +34,4 @@ main = do
     (do removeFile inFile
         removeFile outFile)
 
-genOutputFileName :: IO FilePath
-genOutputFileName = do
-  (path, outH) <- mkstemp "sorted.txt."
-  hClose outH
-  return path
 

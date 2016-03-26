@@ -28,6 +28,12 @@ genRandomFileAndOpen n = do
   h <- openFile path ReadMode
   return (path, h)
 
+genOutputFileName :: IO FilePath
+genOutputFileName = do
+  (path, outH) <- mkstemp "sorted.txt."
+  hClose outH
+  return path
+
 readInt32 :: Handle -> IO Int32
 readInt32 h = Bin.decode <$> LB.hGet h 4
 
