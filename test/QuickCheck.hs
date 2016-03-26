@@ -10,14 +10,14 @@ import Test.QuickCheck.Monadic
 import Data.List
 
 -- friends
-import Data.ExternalMergeSort.Internal
+import Data.ExternalSort.Internal
 
-cfg :: MergeSortCfg Int
+cfg :: ExternalSortCfg Int
 cfg =
-  MergeSortCfg {
+  ExternalSortCfg {
     readRec  = \h -> read <$> hGetLine h
   , writeRec = \h -> hPutStrLn h . show
-  , ways = 5
+  , chunkSize = 5
   }
 
 ---- test the mergeRecsP pipeline

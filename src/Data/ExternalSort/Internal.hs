@@ -27,34 +27,35 @@ import           System.Posix.Temp
 
 data ExternalSortCfg a =
   ExternalSortCfg {
-      -- @readRec h@ is responsible for reading one record from a handle
-      mscReadRec  :: Handle -> IO a
-      -- @mscWriteRec h r@ writes a single record to a handle
-    , mscWriteRec :: Handle -> a -> IO ()
-    , mscChunkSize :: Int -- the number of records read per chunk
+      -- | @readRec h@ is responsible for reading one record from a handle
+      readRec  :: Handle -> IO a
+      -- | @writeRec h r@ writes a single record to a handle
+    , writeRec :: Handle -> a -> IO ()
+      -- | the number of records in each chunk
+    , chunkSize :: Int
     }
 
 
 
 externalSortFile :: Ord a => ExternalSortCfg a -> FilePath -> FilePath -> IO ()
 externalSortFile cfg inFile outFile = do
-  -- TODO: Use bracket here
   withFile inFile ReadMode   $ \inH  ->
     withFile outFile WriteMode $ \outH ->
       externalSortHandle cfg inH outH
 
 externalSortHandle :: Ord a => ExternalSortCfg a -> Handle -> Handle -> IO ()
 externalSortHandle cfg inH outH = do
+  -- fileRef is used to clean up intermediate files when exception occurs
   fileRef <- newIORef []
   finally
-    (do files <- sortAndWriteToChunks fileRef cfg inH
-        runEffect $ fileMerger cfg files outH)
+    (do sortAndWriteToChunks cfg fileRef inH
+        runEffect $ fileMerger cfg fileRef outH)
     (do files <- readIORef fileRef
         mapM_ removeFile files)
 
 
 -- a pipe that reads in a chunk of a file and sorts it
-chunkSorter :: (Ord a, Monad m)  => Pipe [a] [a] m ()
+chunkSorter :: (Ord a, Monad m) => Pipe [a] [a] m ()
 chunkSorter = P.map sort -- TODO: use vector sort
 
 chunkReader :: Int -> (Handle -> IO a) -> Handle -> Producer' [a] IO ()
@@ -85,22 +86,23 @@ readUpToN n rd h = go 0 []
           go (i+1) (a:as)
       | otherwise = return $ Right $ reverse as
 
-chunkWriter :: IORef [FilePath] -> ExternalSortCfg a -> Pipe [a] FilePath IO ()
-chunkWriter fileRef cfg = go
+chunkWriter :: ExternalSortCfg a -> IORef [FilePath] -> Consumer [a] IO ()
+chunkWriter cfg fileRef = go
   where
     go = do
       as <- await -- [as] is sorted
-      file <- lift $ do
+      lift $ do
         (file,h) <- mkstemp "sort-chunk."
         modifyIORef fileRef (file:)
         finally
-          (mapM_ (mscWriteRec cfg h) as)
+          (mapM_ (writeRec cfg h) as)
           (hClose h)
-        return file
-      yield file
       go
 
-
+--
+-- fromHandle' is like fromHandle except that it uses a function @f@ to read from the Handle rather
+-- than reading a 'String'
+--
 {-# INLINE fromHandle' #-}
 fromHandle' :: MonadIO m => (Handle -> IO a) -> Handle -> Producer' a m ()
 fromHandle' f h = go
@@ -118,26 +120,29 @@ singleReader readRec inFile = do
   fromHandle' readRec h
 
 --
--- takes an input file, reads it, writes out to n temporary sorted files
+-- @sortAndWriteToChunks@ reads a number of chunks from the input handle, sorts them, and
+-- writes them out to intermediate files containing @chunkSize cfg@ records.
+-- The paths of the intermediate files are stored in @fileRef@.
+-- (This is so if there is an exception and the program needs to abort we can clean these files
+-- up.)
 --
-sortAndWriteToChunks :: forall a. (Ord a) => IORef [FilePath] -> ExternalSortCfg a -> Handle
-                     -> IO [FilePath]
-sortAndWriteToChunks fileRef cfg inH = reverse <$> P.toListM producer
+sortAndWriteToChunks :: forall a. (Ord a) => ExternalSortCfg a -> IORef [FilePath]
+                     -> Handle -> IO ()
+sortAndWriteToChunks cfg fileRef inH = runEffect producer
   where
-    producer :: Producer FilePath IO ()
-    producer = chunkReader (mscChunkSize cfg) (mscReadRec cfg) inH >->
-               chunkSorter >-> chunkWriter fileRef cfg
+    producer :: Effect IO ()
+    producer = chunkReader (chunkSize cfg) (readRec cfg) inH >->
+               chunkSorter >-> chunkWriter cfg fileRef
 ------------
 
-fileMerger :: forall a. Ord a => ExternalSortCfg a -> [FilePath] -> Handle -> Effect IO ()
-fileMerger cfg files outH = do
-  producer >-> consumer outH
+fileMerger :: forall a. Ord a => ExternalSortCfg a -> IORef [FilePath] -> Handle -> Effect IO ()
+fileMerger cfg fileRef outH = do
+  files <- lift $ readIORef fileRef
+  producer files >-> consumer outH
   where
-    kReaders :: [Producer a IO ()]
-    kReaders = map (\f -> singleReader (mscReadRec cfg) f) files
-    producer :: Producer a IO ()
-    producer = interleave compare kReaders
-    consumer h = P.mapM_ (mscWriteRec cfg h)
-
-squeeze :: Monad m => Pipe [a] a m r
-squeeze = P.concat -- special case of Foldable a => Pipe (f a) a m r
+    producer :: [FilePath] -> Producer a IO ()
+    producer files = interleave compare kReaders
+      where
+        kReaders :: [Producer a IO ()]
+        kReaders = map (\f -> singleReader (readRec cfg) f) files
+    consumer h = P.mapM_ (writeRec cfg h)
