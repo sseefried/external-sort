@@ -51,9 +51,11 @@ module Data.ExternalSort (
 import Data.ExternalSort.Internal
 
 -- $externalSortFile
--- Here is some documentation for 'externalSortFile'
+-- @externalSortFile cfg inFile outFile@ externally sorts @inFile@ and writes its output to @outFile@.
+-- It is simply a wrapper around 'externalSortHandle'.
 --
 
 -- $externalSortHandle
--- Here is some documentation for 'externalSortHandle'
+-- @externalSortHandle cfg inH outH@ externally sorts records from handle @inH@ and writes its
+-- output to handle @outH@
 --
