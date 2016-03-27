@@ -17,7 +17,8 @@ value with the polymorphic type @'ExternalSortCfg' a@. The configuration value c
 * 'readVal': a function to read a value of type @a@ from a 'Handle'
 * 'writeVal': a function to write a value of type @a@ to a 'Handle'
 * 'chunkSize': the number of values that will be read into memory at any one time
-* 'sorter': a sort algorithm to use. (Rather than choose one for you, you are free to use your own)
+* 'sorter': a sort algorithm to use on each chunk. (Rather than choose one for you, you are
+   free to use your own)
 * 'comparer': a function to compare two values
 
 It is up to the user to work out how much memory @chunkSize@ values will use at it will depend
