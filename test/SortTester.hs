@@ -21,8 +21,8 @@ main = do
   let numberOfIntsStr:chunkSizeStr:restArgs = args
   putStrLn "Generating random file..."
   withSystemTempDirectory "SortTester" $ \tmpDir -> do
-    inFile  <- genRandomFile (read numberOfIntsStr)
-    outFile <- genOutputFileName
+    inFile  <- genRandomFile tmpDir (read numberOfIntsStr)
+    outFile <- genOutputFileName tmpDir
     withArgs restArgs $
      defaultMain [
        bgroup "sort-tester" [
