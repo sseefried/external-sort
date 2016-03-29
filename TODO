@@ -6,4 +6,4 @@ TODO
 - have a limit on open file handles and do the merge in multiple passes
 - change 'readVal' signature to 'Handle -> IO (Maybe a)'. A Nothing indicates "EOF" and that
   you should stop
-
+- Rename SortTester to SortBench and make deterministic by using using mkStdGen and setStdGen
