@@ -147,5 +147,5 @@ fileMerger cfg fileRef outH = do
     producer files = interleave (comparer cfg) kReaders
       where
         kReaders :: [Producer a IO ()]
-        kReaders = map (\f -> singleReader (readVal cfg) f) files
+        kReaders = map (singleReader (readVal cfg)) files
     consumer h = P.mapM_ (writeVal cfg h)
