@@ -21,8 +21,8 @@ library
                      , pipes
                      , pipes-interleave
                      , containers
-                     , unix
                      , directory
+                     , temporary
                      , vector
                      , vector-algorithms
 
@@ -46,7 +46,7 @@ executable sort-tester
                      , criterion
                      , directory
                      , random
-                     , unix
+                     , temporary
                      , external-sort
 
 
@@ -68,7 +68,7 @@ test-suite external-sort-test
                      , pipes
                      , pipes-interleave
                      , random
-                     , unix
+                     , temporary
                      , vector
                      , vector-algorithms
 

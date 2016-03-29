@@ -1,20 +1,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module TestUtil where
 
-import           Data.ExternalSort.Internal
+import Data.ExternalSort.Internal
 
 import           Control.Monad
-import qualified Data.Binary as Bin
+import qualified Data.Binary          as Bin
 import qualified Data.ByteString.Lazy as LB
 import           Data.Int
 import           Data.List
 import           System.IO
-import           System.Posix.Temp
 import           System.Random
 
-genRandomFile :: Int -> IO FilePath
-genRandomFile n = do
-  (path, inH) <- mkstemp "unsorted.txt."
+genRandomFile :: FilePath -> Int -> IO FilePath
+genRandomFile tmpDir n = do
+  (path, inH) <- openTempFile tmpDir "unsorted.txt."
   let write = do
         (i :: Int32) <- randomRIO (0,maxBound)
         writeInt32 inH i
@@ -22,15 +21,15 @@ genRandomFile n = do
   hClose inH
   return path
 
-genRandomFileAndOpen :: Int -> IO (FilePath, Handle)
-genRandomFileAndOpen n = do
-  path <- genRandomFile n
+genRandomFileAndOpen :: FilePath -> Int -> IO (FilePath, Handle)
+genRandomFileAndOpen tmpDir n = do
+  path <- genRandomFile tmpDir n
   h <- openFile path ReadMode
   return (path, h)
 
-genOutputFileName :: IO FilePath
-genOutputFileName = do
-  (path, outH) <- mkstemp "sorted.txt."
+genOutputFileName :: FilePath -> IO FilePath
+genOutputFileName tmpDir = do
+  (path, outH) <- openTempFile tmpDir "sorted.txt."
   hClose outH
   return path
 

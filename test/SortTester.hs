@@ -1,15 +1,16 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
-module Main where
+module Main (main) where
 
-import           TestUtil
+import TestUtil
 
-import           Control.Exception
-import           Control.Monad (when)
-import           Criterion.Main
-import           Data.ExternalSort (externalSortFile)
-import           System.Directory
-import           System.Environment
-import           System.Exit
+import Control.Exception
+import Control.Monad      (when)
+import Criterion.Main
+import Data.ExternalSort  (externalSortFile)
+import System.Directory
+import System.Environment
+import System.Exit
+import System.IO.Temp     (withSystemTempDirectory)
 
 main :: IO ()
 main = do
@@ -19,17 +20,13 @@ main = do
     exitWith (ExitFailure 1)
   let numberOfIntsStr:chunkSizeStr:restArgs = args
   putStrLn "Generating random file..."
-  inFile  <- genRandomFile (read numberOfIntsStr)
-  outFile <- genOutputFileName
-  finally
-    (withArgs restArgs $
-      defaultMain [
-        bgroup "sort-tester" [
-          bench "sort" $ nfIO (externalSortFile (int32SortCfgOfSize (read chunkSizeStr))
-                                                 inFile outFile)
-        ]
-      ])
-    (do removeFile inFile
-        removeFile outFile)
-
-
+  withSystemTempDirectory "SortTester" $ \tmpDir -> do
+    inFile  <- genRandomFile (read numberOfIntsStr)
+    outFile <- genOutputFileName
+    withArgs restArgs $
+     defaultMain [
+       bgroup "sort-tester" [
+         bench "sort" $ nfIO (externalSortFile (int32SortCfgOfSize (read chunkSizeStr))
+                                                inFile outFile)
+       ]
+     ]

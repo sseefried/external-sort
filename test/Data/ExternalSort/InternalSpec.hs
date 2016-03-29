@@ -1,11 +1,11 @@
-module Data.ExternalSort.InternalSpec where
+module Data.ExternalSort.InternalSpec (spec, main) where
 
 import Data.ExternalSort.Internal
 import TestUtil
 
-import Data.IORef
 import System.Directory
 import System.IO
+import System.IO.Temp   (withSystemTempDirectory)
 import System.Random
 import Test.Hspec
 
@@ -26,27 +26,27 @@ spec = do
     describe "Sorting works" $ do
       context "sortAndWriteToChunks" $ do
         it "Intermediate files are sorted" $ do
-          (path, h) <- genRandomFileAndOpen numRecords
-          fileRef <- newIORef []
-          let cfg = int32SortCfgOfSize chunkSz
-          sortAndWriteToChunks cfg fileRef h
-          files <- readIORef fileRef
-          results <- mapM (isFileSorted cfg) files
-          -- clean up
-          mapM_ removeFile files
-          hClose h
-          removeFile path
-          -- check results
-          all id results `shouldBe` True
+          withSystemTempDirectory "sort-spec-intermediate" $ \tmpDir -> do
+            (path, h) <- genRandomFileAndOpen tmpDir numRecords
+            let cfg = int32SortCfgOfSize chunkSz
+            files <- sortAndWriteToChunks cfg tmpDir h
+            results <- mapM (isFileSorted cfg) files
+            -- clean up
+            mapM_ removeFile files -- Shouldn't need to, but can't hurt.
+            hClose h
+            removeFile path
+            -- check results
+            all id results `shouldBe` True
       context "externalSortFile" $ do
         it "sorts the file" $ do
-          inFile <- genRandomFile numRecords
-          outFile <-genOutputFileName
-          let cfg = int32SortCfgOfSize chunkSz
-          externalSortFile cfg inFile outFile
-          isSorted <- isFileSorted cfg outFile
-          mapM_ removeFile [inFile, outFile]
-          isSorted `shouldBe` True
+          withSystemTempDirectory "sort-spec-sorting" $ \tmpDir -> do
+            inFile  <- genRandomFile tmpDir numRecords
+            outFile <- genOutputFileName tmpDir
+            let cfg =  int32SortCfgOfSize chunkSz
+            externalSortFile cfg inFile outFile
+            isSorted <- isFileSorted cfg outFile
+            mapM_ removeFile [inFile, outFile]
+            isSorted `shouldBe` True
 
 main :: IO ()
 main = hspec spec
